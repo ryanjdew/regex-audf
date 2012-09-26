@@ -1,5 +1,6 @@
 #include <MarkLogic.h>
 #include <regex.h> 
+#include <string.h>
 #include <vector>
 
 #ifdef _MSC_VER
@@ -59,6 +60,13 @@ finish(OutputSequence& os, Reporter& reporter)
   {
     os.writeValue(*(matches[i]));
   }
+  /* Clean up created strings? Not sure if the following will clean up too soon. */
+  /*
+  for (int i = 0; i < o_size; i++)
+  {
+    delete *(matches[i]);
+  }
+  */
 }
 
 void Regex::
@@ -71,8 +79,13 @@ map(TupleIterator& values, Reporter& reporter)
 	  /* Execute regular expression */
 	  reti = regexec(&regex_compiled, cur.get(), 0, NULL, 0);
 	  if( !reti ){
+		  /* If matches then create a copy of the string */
 		  reporter.log(Reporter::Info, "Match found.");
-		  matches.push_back(&cur);
+		  size_t str_length = strlen(cur.get());
+		  char cp_str[str_length];
+		  strcpy(cp_str,cur.get());
+		  /* Store the pointer to the marklogic::String for output later */
+		  matches.push_back(new String(cp_str,cur.collation()));
 	  }
     }
   }
@@ -81,7 +94,7 @@ map(TupleIterator& values, Reporter& reporter)
 void Regex::
 reduce(const AggregateUDF* _o, Reporter& reporter)
 {
-  return;
+  /* Merge matches found */
   const Regex *o = (const Regex*)_o;
   int o_size = o->matches.size();
   for (int i = 0; i < o_size; i++) {
@@ -94,7 +107,7 @@ encode(Encoder& e, Reporter& reporter)
 {
   int o_size = matches.size();
   for (int i = 0; i < o_size; i++)
-    e.encode(*(matches[i]),sizeof(String));
+    e.encode(matches[i],sizeof(String));
 }
 
 void Regex::
@@ -102,161 +115,11 @@ decode(Decoder& d, Reporter& reporter)
 {
   int o_size = matches.size();
   for (int i = 0; i < o_size; i++)
-    d.decode((matches[i]),sizeof(String));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/*
-class ReverseRegex : public AggregateUDF
-{
-public:
-  double value;
-
-public:
-  AggregateUDF* clone() const { return new ReverseRegex(*this); }
-  void close() { delete this; }
-
-  void start(Sequence&, Reporter&);
-  void finish(OutputSequence& os, Reporter& reporter);
-
-  void map(TupleIterator& values, Reporter& reporter);
-  void reduce(const AggregateUDF* _o, Reporter& reporter);
-
-  void encode(Encoder& e, Reporter& reporter);
-  void decode(Decoder& d, Reporter& reporter);
-};
-
-void ReverseRegex::
-start(Sequence& arg, Reporter& reporter)
-{
-  arg.value(value);
-}
-
-void ReverseRegex::
-finish(OutputSequence& os, Reporter& reporter)
-{
-  if(!empty) os.writeValue(max);
-}
-
-void ReverseRegex::
-map(TupleIterator& values, Reporter& reporter)
-{
-  for(; !values.done(); values.next()) {
-    if(!values.null(0)) {
-      double v; values.value(0,v);
-      if(v > value) gt += values.frequency();
-      else if(v == value) eq += values.frequency();
-      else lt += values.frequency();
-    }
-  }
-}
-
-void ReverseRegex::
-reduce(const AggregateUDF* _o, Reporter& reporter)
-{
-  const MedianTest *o = (const MedianTest*)_o;
-  gt += o->gt;
-  eq += o->eq;
-  lt += o->lt;
-}
-
-void ReverseRegex::
-encode(Encoder& e, Reporter& reporter)
-{
-  e.encode(value);
-  e.encode(gt);
-  e.encode(eq);
-  e.encode(lt);
-}
-
-void ReverseRegex::
-decode(Decoder& d, Reporter& reporter)
-{
-  d.decode(value);
-  d.decode(gt);
-  d.decode(eq);
-  d.decode(lt);
+    d.decode(matches[i],sizeof(String));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename T>
-class Max : public AggregateUDF
-{
-public:
-  bool empty;
-  T max;
-  bool dolt;
-  T lt;
-
-public:
-  Max(): empty(true), max(), dolt(false), lt() {}
-
-  AggregateUDF* clone() const { return new Max(*this); }
-  void close() { delete this; }
-
-  void start(Sequence&, Reporter&);
-  void finish(OutputSequence& os, Reporter& reporter);
-
-  void map(TupleIterator& values, Reporter& reporter);
-  void reduce(const AggregateUDF* _o, Reporter& reporter);
-
-  void encode(Encoder& e, Reporter& reporter);
-  void decode(Decoder& d, Reporter& reporter);
-
-  RangeIndex::Order getOrder() const { return RangeIndex::DESCENDING; }
-};
-
-template<typename T> void Max<T>::
-start(Sequence& arg, Reporter& reporter)
-{
-  if(!arg.done()) { dolt=true; arg.value(lt); }
-}
-
-template<typename T> void Max<T>::
-finish(OutputSequence& os, Reporter& reporter)
-{
-  if(!empty) os.writeValue(max);
-}
-
-template<typename T> void Max<T>::
-map(TupleIterator& values, Reporter& reporter)
-{
-  for(; !values.done(); values.next()) {
-    if(values.null(0)) continue;
-    T tmp; values.value(0,tmp);
-    if(!dolt || tmp < lt) { empty = false; max = tmp; break; }
-  }
-}
-
-template<typename T> void Max<T>::
-reduce(const AggregateUDF* _o, Reporter& reporter)
-{
-  const Max *o = (const Max*)_o;
-  if(empty || (!o->empty && o->max > max)) {
-    empty = o->empty;
-    max = o->max;
-  }
-}
-
-template<typename T> void Max<T>::
-encode(Encoder& e, Reporter& reporter)
-{
-  e.encode(empty);
-  if(!empty) e.encode(max);
-  e.encode(dolt);
-  if(dolt) e.encode(lt);
-}
-
-template<typename T> void Max<T>::
-decode(Decoder& d, Reporter& reporter)
-{
-  d.decode(empty);
-  if(!empty) d.decode(max);
-  d.decode(dolt);
-  if(dolt) d.decode(lt);
-}
-*/
 ////////////////////////////////////////////////////////////////////////////////
 
 extern "C" PLUGIN_DLL void
