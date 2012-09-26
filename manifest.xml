@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://marklogic.com/extension/plugin">
+  <name>regex-audf</name>
+  <id>regex-audf</id>
+  <version>0.1</version>
+  <provider-name>Ryan Dew</provider-name>
+  <description>Native plugin for working with regex</description>
+  <native>
+    <path>libregex-audf.dylib</path>
+  </native>
+</plugin>
