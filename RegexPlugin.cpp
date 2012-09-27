@@ -45,7 +45,6 @@ start(Sequence& arg, Reporter& reporter)
 {
   int reti;
   arg.value(regex);
-  reporter.log(Reporter::Info, regex.get());
   /* Compile regular expression */
   reti = regcomp(&regex_compiled, regex.get(), 0);
 }
@@ -53,18 +52,16 @@ start(Sequence& arg, Reporter& reporter)
 void Regex::
 finish(OutputSequence& os, Reporter& reporter)
 {
-  /* Free compiled regular expression if you want to use the regex_t again */
+  /* Free compiled regular expression */
   regfree(&regex_compiled);
   int o_size = matches.size();
   for (int i = 0; i < o_size; i++)
   {
     os.writeValue(*(matches[i]));
   }
-  /* Clean up created strings? Not sure if the following will clean up too soon. */
+  /* Clean up created strings */
   for (int i = 0; i < o_size; i++)
-  {
-    delete *(matches[i]);
-  }
+    delete matches[i];
 }
 
 void Regex::
@@ -78,7 +75,6 @@ map(TupleIterator& values, Reporter& reporter)
 	  reti = regexec(&regex_compiled, cur.get(), 0, NULL, 0);
 	  if( !reti ){
 		  /* If matches then create a copy of the string */
-		  reporter.log(Reporter::Info, "Match found.");
 		  size_t str_length = strlen(cur.get());
 		  char cp_str[str_length];
 		  strcpy(cp_str,cur.get());
@@ -117,7 +113,105 @@ decode(Decoder& d, Reporter& reporter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+class ReverseRegex : public AggregateUDF
+{
+public:
+  String rregex;
+  regex_t regex_compiled;
+  std::vector<String*> matches;
+public:
+  AggregateUDF* clone() const { return new ReverseRegex(*this); }
+  void close();
 
+  void start(Sequence&, Reporter&);
+  void finish(OutputSequence& os, Reporter& reporter);
+
+  void map(TupleIterator& values, Reporter& reporter);
+  void reduce(const AggregateUDF* _o, Reporter& reporter);
+
+  void encode(Encoder& e, Reporter& reporter);
+  void decode(Decoder& d, Reporter& reporter);
+
+};
+
+void ReverseRegex::
+close() { 
+  matches.clear();
+  delete this; 
+}
+
+void ReverseRegex::
+start(Sequence& arg, Reporter& reporter)
+{
+  arg.value(rregex);
+}
+
+void ReverseRegex::
+finish(OutputSequence& os, Reporter& reporter)
+{
+  int o_size = matches.size();
+  for (int i = 0; i < o_size; i++)
+  {
+    os.writeValue(*(matches[i]));
+  }
+  /* Clean up created strings */
+  for (int i = 0; i < o_size; i++)
+    delete matches[i];
+}
+
+void ReverseRegex::
+map(TupleIterator& values, Reporter& reporter)
+{
+  int reti = 0;
+  for(; !values.done(); values.next()) {
+    if(!values.null(0)) {
+      String cur; values.value(0,cur);
+	  /* Compile regular expression */
+	  reti = regcomp(&regex_compiled, cur.get(), 0);
+	  if ( !reti ) {
+	    /* Execute regular expression */
+	    reti = regexec(&regex_compiled, rregex.get(), 0, NULL, 0);
+	    if( !reti ){
+		  /* If matches then create a copy of the string */
+		  size_t str_length = strlen(cur.get());
+		  char cp_str[str_length];
+		  strcpy(cp_str,cur.get());
+		  /* Store the pointer to the marklogic::String for output later */
+		  matches.push_back(new String(cp_str,cur.collation()));
+	    }
+	    /* Free compiled regular expression if you want to use the regex_t again */
+	    regfree(&regex_compiled);
+	  } 
+    }
+  }
+}
+
+void ReverseRegex::
+reduce(const AggregateUDF* _o, Reporter& reporter)
+{
+  /* Merge matches found */
+  const ReverseRegex *o = (const ReverseRegex*)_o;
+  int o_size = o->matches.size();
+  for (int i = 0; i < o_size; i++) {
+    matches.push_back(o->matches[i]);
+  }
+}
+
+void ReverseRegex::
+encode(Encoder& e, Reporter& reporter)
+{
+  int o_size = matches.size();
+  for (int i = 0; i < o_size; i++)
+    e.encode(matches[i],sizeof(String));
+}
+
+void ReverseRegex::
+decode(Decoder& d, Reporter& reporter)
+{
+  int o_size = matches.size();
+  for (int i = 0; i < o_size; i++)
+    d.decode(matches[i],sizeof(String));
+}
 ////////////////////////////////////////////////////////////////////////////////
 
 extern "C" PLUGIN_DLL void
@@ -125,4 +219,5 @@ marklogicPlugin(Registry& r)
 {
   r.version();
   r.registerAggregate<Regex>("regex");
+  r.registerAggregate<ReverseRegex>("reverse-regex");
 }
