@@ -61,12 +61,10 @@ finish(OutputSequence& os, Reporter& reporter)
     os.writeValue(*(matches[i]));
   }
   /* Clean up created strings? Not sure if the following will clean up too soon. */
-  /*
   for (int i = 0; i < o_size; i++)
   {
     delete *(matches[i]);
   }
-  */
 }
 
 void Regex::
