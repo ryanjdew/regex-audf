@@ -58,10 +58,9 @@ finish(OutputSequence& os, Reporter& reporter)
   for (int i = 0; i < o_size; i++)
   {
     os.writeValue(*(matches[i]));
-  }
-  /* Clean up created strings */
-  for (int i = 0; i < o_size; i++)
+	/* Clean up created strings */
     delete matches[i];
+  }
 }
 
 void Regex::
@@ -90,10 +89,8 @@ reduce(const AggregateUDF* _o, Reporter& reporter)
 {
   /* Merge matches found */
   const Regex *o = (const Regex*)_o;
-  int o_size = o->matches.size();
-  for (int i = 0; i < o_size; i++) {
-    matches.push_back(o->matches[i]);
-  }
+  std::vector<String*> o_matches = o->matches;
+  matches.insert(matches.end(),o_matches.begin(),o_matches.end());
 }
 
 void Regex::
@@ -153,29 +150,26 @@ finish(OutputSequence& os, Reporter& reporter)
   for (int i = 0; i < o_size; i++)
   {
     os.writeValue(*(matches[i]));
-  }
-  /* Clean up created strings */
-  for (int i = 0; i < o_size; i++)
+	/* Clean up created strings */
     delete matches[i];
+  }
 }
 
 void ReverseRegex::
 map(TupleIterator& values, Reporter& reporter)
 {
-  int reti = 0;
   for(; !values.done(); values.next()) {
     if(!values.null(0)) {
       String cur; values.value(0,cur);
+	  const char *str_char = cur.get();
 	  /* Compile regular expression */
-	  reti = regcomp(&regex_compiled, cur.get(), 0);
-	  if ( !reti ) {
+	  if ( !regcomp(&regex_compiled, str_char, 0)) {
 	    /* Execute regular expression */
-	    reti = regexec(&regex_compiled, rregex.get(), 0, NULL, 0);
-	    if( !reti ){
+	    if( !regexec(&regex_compiled, rregex.get(), 0, NULL, 0) ){
 		  /* If matches then create a copy of the string */
-		  size_t str_length = strlen(cur.get());
+		  size_t str_length = strlen(str_char);
 		  char cp_str[str_length];
-		  strcpy(cp_str,cur.get());
+		  strcpy(cp_str,str_char);
 		  /* Store the pointer to the marklogic::String for output later */
 		  matches.push_back(new String(cp_str,cur.collation()));
 	    }
@@ -191,10 +185,8 @@ reduce(const AggregateUDF* _o, Reporter& reporter)
 {
   /* Merge matches found */
   const ReverseRegex *o = (const ReverseRegex*)_o;
-  int o_size = o->matches.size();
-  for (int i = 0; i < o_size; i++) {
-    matches.push_back(o->matches[i]);
-  }
+  std::vector<String*> o_matches = o->matches;
+  matches.insert(matches.end(),o_matches.begin(),o_matches.end());
 }
 
 void ReverseRegex::
